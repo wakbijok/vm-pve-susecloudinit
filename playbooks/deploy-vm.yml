@@ -1,0 +1,68 @@
+# playbooks/deploy-vm.yml
+---
+- name: Deploy OpenSUSE Cloud-Init VM on Proxmox
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/vault.yml
+
+  tasks:
+    - name: Download OpenSUSE Cloud Image to Proxmox
+      ansible.builtin.shell: >
+        ssh {{ proxmox_api_host }} "wget --progress=bar:force:noscroll https://download.opensuse.org/repositories/Cloud:/Images:/Leap_15.4/images/openSUSE-Leap-15.4.x86_64-NoCloud.qcow2 -O /var/lib/vz/template/iso/opensuse-cloud.qcow2"
+      register: download_output
+      changed_when: download_output.rc == 0
+      become: true
+      become_user: root
+      delegate_to: "{{ proxmox_api_host }}"
+
+    - name: Create cloud-init VM
+      community.general.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        node: "{{ cluster_name }}"
+        name: "{{ vm_name }}"
+        vmid: "{{ vmid }}"
+        cores: 2
+        memory: 2048
+        net0: "virtio,bridge=vmbr0"
+        scsi0: "{{ storage }}:0,import-from=/var/lib/vz/template/iso/opensuse-cloud.qcow2"
+        scsihw: "virtio-scsi-pci"
+        ostype: "l26"
+        cloudinit: true
+        onboot: true
+        agent: 1
+        state: present
+        ipconfig0: "ip=dhcp"
+        searchdomain: "local"
+        nameserver: "1.1.1.1"
+        ciuser: "admin"
+        cipassword: "{{ vault_proxmox_api_password }}"
+        sshkeys: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+    - name: Start VM
+      community.general.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        node: "{{ cluster_name }}"
+        name: "{{ vm_name }}"
+        state: started
+
+    - name: Wait for VM to be ready
+      wait_for:
+        host: "{{ vm_name }}"
+        port: 22
+        timeout: 300
+
+    - name: Install basic packages
+      community.general.zypper:
+        name:
+          - wget
+          - curl
+          - vim
+          - telnet
+          - nano
+        state: present
+      delegate_to: "{{ vm_name }}"
