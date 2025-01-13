@@ -1,56 +1,70 @@
-This Ansible playbook automates the deployment of an OpenSUSE Cloud-Init-enabled virtual machine on a Proxmox VE cluster. It handles downloading the OpenSUSE cloud image, creating the VM, configuring cloud-init, and installing basic packages.
-Prerequisites
+# OpenSUSE Cloud-Init VM Deployment for Proxmox
 
-    Proxmox VE Configuration:
-        Ensure Proxmox VE is installed and accessible.
-        Verify the Proxmox node and storage are properly configured.
+This Ansible playbook automates the deployment of an OpenSUSE Cloud-Init-enabled virtual machine on a Proxmox VE cluster. The automation handles multiple tasks including downloading the OpenSUSE cloud image, creating the VM, configuring cloud-init, and installing essential packages.
 
-    Ansible Installation:
-        Install Ansible on your local machine:
+## Prerequisites
 
-    pip install ansible
+### Proxmox VE Configuration
 
-Ansible Collections:
+Before you begin, ensure you have:
 
-    Install the required Ansible collections:
+- A properly installed and accessible Proxmox VE instance
+- Correctly configured Proxmox node and storage settings
 
-        ansible-galaxy collection install community.general
+### Required Software
 
-    SSH Access:
-        Ensure passwordless SSH access is set up from your local machine to the Proxmox server.
-        Add your public SSH key to Proxmox: /root/.ssh/authorized_keys.
+1. **Ansible Installation**
 
-    Configuration Files:
-        Create the required group_vars files:
-            group_vars/vault.yml (for sensitive variables like passwords)
-            group_vars/vars.yml (for other configuration variables)
+   Install Ansible on your local machine:
+   ```bash
+   pip install ansible
+   ```
 
-File Structure
+2. **Ansible Collections**
 
+   Install the required community collection:
+   ```bash
+   ansible-galaxy collection install community.general
+   ```
+
+### Access Requirements
+
+- Configure passwordless SSH access from your local machine to the Proxmox server
+- Add your SSH public key to Proxmox: `/root/.ssh/authorized_keys`
+
+## Project Structure
+
+```
 .
 ├── playbooks/
-│   └── deploy-vm.yml         # The Ansible playbook
+│   └── deploy-vm.yml         # Main Ansible playbook
 ├── group_vars/
-│   ├── vault.yml             # Sensitive variables (encrypted with Ansible Vault)
-│   ├── vars.yml              # Non-sensitive variables
-└── README.md                 # Documentation
+│   ├── vault.yml             # Encrypted sensitive variables
+│   ├── vars.yml              # Configuration variables
+└── README.md                 # This documentation
+```
 
-Variables
-group_vars/vault.yml
+## Configuration
 
-Store sensitive information securely. Example:
+### Sensitive Variables (group_vars/vault.yml)
 
+Create and encrypt your sensitive variables file with the following structure:
+
+```yaml
 vault_proxmox_api_password: "your_password"
 vault_ssh_password: "your_password"
+```
 
-Encrypt the file using Ansible Vault:
-
+Encrypt the file using:
+```bash
 ansible-vault encrypt group_vars/vault.yml
+```
 
-group_vars/vars.yml
+### Configuration Variables (group_vars/vars.yml)
 
-Define your VM configuration variables. Example:
+Set your VM configuration variables:
 
+```yaml
 proxmox_api_host: "192.168.0.21"
 proxmox_api_user: "root@pam"
 proxmox_node: "pve-home"
@@ -59,45 +73,63 @@ vm_name: "opensuse-cloudinit"
 vmid: 101
 static_ip: "192.168.1.100"
 gateway: "192.168.1.1"
+```
 
-Usage
+## Deployment
 
-    Clone the repository or place the files in your working directory.
+1. Clone this repository or copy the files to your working directory
+2. Run the deployment playbook:
+   ```bash
+   ansible-playbook playbooks/deploy-vm.yml --ask-vault-pass
+   ```
+3. Enter your Ansible Vault password when prompted
 
-    Run the playbook:
+## Deployment Process
 
-    ansible-playbook playbooks/deploy-vm.yml --ask-vault-pass
+The playbook executes the following steps:
 
-    Provide the Ansible Vault password when prompted.
+1. **Image Download**: Retrieves the latest OpenSUSE cloud image
+2. **VM Creation**: Sets up the VM with the specified configuration
+3. **Cloud-Init Integration**: Configures and attaches the cloud-init disk
+4. **VM Initialization**: Boots the newly created VM
+5. **Package Installation**: Installs basic utility packages
 
-Workflow
+## Customization Options
 
-    Download OpenSUSE Cloud Image:
-        Downloads the latest OpenSUSE cloud image to the Proxmox VE server.
+### Virtual Machine Settings
 
-    Create the Cloud-Init VM:
-        Creates a VM with the specified configuration and attaches the cloud-init disk.
+Modify the following variables in `vars.yml` to customize your VM:
+- `vm_name`: Virtual machine name
+- `vmid`: Unique VM identifier
+- `cores`: Number of CPU cores
+- `memory`: RAM allocation
+- `static_ip`: Fixed IP address
+- `gateway`: Network gateway
 
-    Start the VM:
-        Boots the newly created VM.
+### Package Configuration
 
-    Install Basic Packages:
-        Installs utilities like wget, curl, vim, etc., on the VM.
+Customize the package installation task in the playbook to include additional software based on your requirements.
 
-Customization
+## Troubleshooting Guide
 
-    VM Configuration: Modify variables like vm_name, vmid, cores, memory, static_ip, and gateway in vars.yml to customize the VM.
+### Common Issues
 
-    Packages: Update the list of packages in the Install basic packages task to include any additional software you need.
+1. **Undefined Variables**
+   - Verify all required variables are properly defined in `vars.yml` and `vault.yml`
+   - Check variable naming consistency
 
-Troubleshooting
+2. **SSH Authentication Failures**
+   - Verify SSH key path: `/Users/wakbijak/Nextcloud/DevOps/keys/arif.pub`
+   - Ensure correct permissions on SSH keys
+   - Check SSH key deployment on Proxmox
 
-    Playbook Fails with Undefined Variables: Ensure all required variables are defined in vars.yml and vault.yml.
+3. **Proxmox-Related Errors**
+   - Check Proxmox logs:
+     - `/var/log/syslog`
+     - `/var/log/pve/tasks`
+   - Verify Proxmox API accessibility
+   - Confirm storage availability
 
-    SSH Key Errors: Verify that your public SSH key is correctly configured in /Users/wakbijak/Nextcloud/DevOps/keys/arif.pub.
+## License
 
-    Proxmox Errors: Check Proxmox logs (/var/log/syslog or /var/log/pve/tasks) for detailed error messages.
-
-License
-
-This playbook is licensed under the MIT License.
+This project is licensed under the MIT License.
