@@ -1,13 +1,14 @@
 # playbooks/deploy-vm.yml
 ---
-- name: Deploy OpenSUSE Cloud-Init VM on Proxmox
+- name: Deploy OpenSUSE VM on Proxmox with CloudInit
   hosts: localhost
   gather_facts: false
   vars_files:
-    - group_vars/vault.yml
+    - ../group_vars/vault.yml
+    - ../group_vars/vars.yml
 
   tasks:
-    - name: Download OpenSUSE Cloud Image to Proxmox
+    - name: Download OpenSUSE Cloud Image
       ansible.builtin.shell: >
         ssh {{ proxmox_api_host }} "wget --progress=bar:force:noscroll https://download.opensuse.org/repositories/Cloud:/Images:/Leap_15.4/images/openSUSE-Leap-15.4.x86_64-NoCloud.qcow2 -O /var/lib/vz/template/iso/opensuse-cloud.qcow2"
       register: download_output
@@ -15,48 +16,57 @@
       become: true
       become_user: root
       delegate_to: "{{ proxmox_api_host }}"
-
-    - name: Create cloud-init VM
+    
+    - name: Creating VM "{{ vm_name }}"
       community.general.proxmox_kvm:
         api_host: "{{ proxmox_api_host }}"
         api_user: "{{ proxmox_api_user }}"
         api_password: "{{ proxmox_api_password }}"
-        node: "{{ cluster_name }}"
+        node: "{{ proxmox_node }}"
         name: "{{ vm_name }}"
         vmid: "{{ vmid }}"
         cores: 2
         memory: 2048
-        net0: "virtio,bridge=vmbr0"
-        scsi0: "{{ storage }}:0,import-from=/var/lib/vz/template/iso/opensuse-cloud.qcow2"
+        net:
+          net0: 'virtio,bridge=vmbr0'
+        scsi:
+          scsi0: "{{ storage }}:0,import-from=/var/lib/vz/template/iso/opensuse-cloud.qcow2"
         scsihw: "virtio-scsi-pci"
+        ide:
+          ide2: "{{ storage }}:cloudinit,format=qcow2"
         ostype: "l26"
-        cloudinit: true
-        onboot: true
+        #cicustom: "user=local:snippets/cloud-init-user.yaml"
+        ciuser: "arif"
+        cipassword: "{{ vault_proxmox_api_password }}"
+        sshkeys: "{{ lookup('file', '/Users/wakbijak/Nextcloud/DevOps/keys/arif.pub') }}"
+        nameservers: "{{ dns }}"
+        searchdomains: "local"
+        ipconfig: 
+          ipconfig0: "ip={{ static_ip }},gw={{ gateway }}"
         agent: 1
         state: present
-        ipconfig0: "ip=dhcp"
-        searchdomain: "local"
-        nameserver: "1.1.1.1"
-        ciuser: "admin"
-        cipassword: "{{ vault_proxmox_api_password }}"
-        sshkeys: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+        onboot: true
 
-    - name: Start VM
+    - name: Waiting "{{ vm_name }}" creation to complete
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Starting "{{ vm_name }}"
       community.general.proxmox_kvm:
         api_host: "{{ proxmox_api_host }}"
         api_user: "{{ proxmox_api_user }}"
         api_password: "{{ proxmox_api_password }}"
-        node: "{{ cluster_name }}"
+        node: "{{ proxmox_node }}"
         name: "{{ vm_name }}"
         state: started
 
-    - name: Wait for VM to be ready
+    - name: Waiting for "{{ vm_name }}" to be ready
       wait_for:
         host: "{{ vm_name }}"
         port: 22
         timeout: 300
 
-    - name: Install basic packages
+    - name: Install basic packages in "{{ vm_name }}"
       community.general.zypper:
         name:
           - wget
